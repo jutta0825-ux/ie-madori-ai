@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f6f4ef">
+<title>間取りAI｜住宅プランナー</title>
+<style>
+:root{--ink:#202b35;--muted:#687582;--paper:#f6f4ef;--card:#fff;--line:#dce2e5;--accent:#176b63;--accent2:#e6f2ef}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif}
+header{padding:22px max(16px,calc((100vw - 1200px)/2));background:#183c3b;color:white}
+header .eyebrow{font-size:12px;letter-spacing:.12em;opacity:.8}h1{font-size:clamp(24px,4vw,36px);margin:6px 0}header p{margin:0;color:#d5e5e2}
+main{max-width:1200px;margin:auto;padding:18px;display:grid;grid-template-columns:310px 1fr;gap:18px}
+.panel,.plan-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 4px 20px #152c3210}
+h2{font-size:18px;margin:0 0 14px}h3{font-size:16px;margin:0 0 8px}label{display:block;font-size:13px;font-weight:650;margin:13px 0 6px}
+input,select,textarea{width:100%;padding:10px 11px;border:1px solid #cbd5da;border-radius:9px;background:white;color:var(--ink);font:inherit}textarea{resize:vertical;min-height:72px}
+button{border:0;border-radius:10px;padding:11px 14px;background:var(--accent);color:white;font:inherit;font-weight:700;cursor:pointer}
+button.secondary{background:#edf2f1;color:var(--ink);border:1px solid var(--line)}button:disabled{opacity:.55;cursor:wait}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}.hint{font-size:12px;color:var(--muted);line-height:1.6}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.plan-card{padding:12px;min-width:0}.plan-card.active{outline:2px solid var(--accent);border-color:var(--accent)}.plan-card .tag{font-size:11px;color:var(--accent);font-weight:800;letter-spacing:.04em}.plan-card h3{margin:4px 0}.plan-card p{font-size:12px;line-height:1.5;color:var(--muted);min-height:54px}
+.plan{width:100%;height:auto;display:block;background:#fbfaf7;border:1px solid var(--line);border-radius:10px;touch-action:none}
+.room{cursor:grab;touch-action:none}.room:active{cursor:grabbing}.room rect{fill:#fff;stroke:#293a43;stroke-width:2}.room text{font-size:10px;fill:#23323a;text-anchor:middle;pointer-events:none}.room .sub{font-size:8px;fill:#667780}
+.editor{margin-top:14px}.editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.status{margin-top:12px;padding:11px 12px;border-radius:10px;background:var(--accent2);font-size:13px;line-height:1.5}.status.error{background:#fff0eb;color:#8c321a}.status:empty{display:none}.loading{opacity:.65}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:12px}.plans{grid-template-columns:1fr}.plan-card p{min-height:0}.plan{max-height:360px}.editor-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){header{padding:18px 16px}.editor-grid{grid-template-columns:1fr}.panel,.plan-card{padding:14px}}
+</style>
+</head>
+<body>
+<header><div class="eyebrow">AI HOME PLANNER · STARTER</div><h1>間取りAI</h1><p>希望を入力して、住宅プランを比較・編集しよう。</p></header>
+<main>
+<section class="panel">
+<h2>建築の要望</h2>
+<label for="area">延床面積の目安（㎡）</label><input id="area" type="number" min="30" max="400" value="100">
+<label for="floors">階数</label><select id="floors"><option value="1">平屋</option><option value="2" selected>2階建て（まず1階を作成）</option></select>
+<label for="rooms">必要な部屋</label><textarea id="rooms">LDK、寝室、子ども部屋2室、浴室、洗面脱衣室、トイレ、収納</textarea>
+<label for="entrance">玄関の方角</label><select id="entrance"><option>南</option><option>北</option><option>東</option><option>西</option></select>
+<label for="priority">最も重視すること</label><select id="priority"><option>生活動線</option><option>部屋の広さ</option><option>収納</option><option>プライバシー</option><option>日当たり</option></select>
+<label for="notes">その他の希望</label><textarea id="notes" placeholder="例：キッチンから洗面所へ行きやすく、玄関に土間収納がほしい"></textarea>
+<div class="actions"><button id="generate">3案を提案</button><button class="secondary" id="reset">初期配置に戻す</button></div>
+<p class="hint">試作版です。表示される図面は概念的な配置案で、建築確認用の設計図ではありません。</p>
+<div id="status" class="status" role="status"></div>
+</section>
+<section>
+<div class="topbar"><div><h2 style="margin-bottom:4px">間取り案を比較</h2><div class="hint">部屋をドラッグして位置を調整できます。案をタップして選択。</div></div></div>
+<div id="plans" class="plans"></div>
+<div class="panel editor">
+<h2>選択した案を編集</h2>
+<div class="editor-grid">
+<div><label for="roomSelect">編集する部屋</label><select id="roomSelect"></select></div>
+<div><label for="roomWidth">幅（概算 m）</label><input id="roomWidth" type="number" min="1" max="10" step=".5" value="3"></div>
+<div><label for="roomHeight">奥行（概算 m）</label><input id="roomHeight" type="number" min="1" max="10" step=".5" value="3"></div>
+<div><label for="doorType">ドアの種類</label><select id="doorType"><option>開き戸</option><option>引き戸</option><option>折れ戸</option><option>なし</option></select></div>
+<div><label for="windowSide">窓の位置</label><select id="windowSide"><option>北側</option><option>東側</option><option>南側</option><option>西側</option><option>窓なし</option></select></div>
+<div><label for="entranceSide">玄関の位置</label><select id="entranceSide"><option>南側</option><option>北側</option><option>東側</option><option>西側</option></select></div>
+</div>
+<div class="actions"><button id="applyEdit">編集内容を反映</button><button class="secondary" id="compare">選択案を拡大</button></div>
+<p class="hint">ドラッグ移動は画面上の概念配置を変更します。寸法や壁・開口部の整合性は自動保証されません。</p>
+</div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const roomNames=()=> $('rooms').value.split(/[、,\n]/).map(s=>s.trim()).filter(Boolean);
+const templates=[
+ {name:"A案｜生活動線",desc:"LDKを中心に水回りへ移動しやすい配置。",positions:[[10,10,42,30],[54,10,28,22],[54,36,28,22],[10,46,22,20],[36,46,22,20],[62,64,20,18]]},
+ {name:"B案｜広さ重視",desc:"LDKのまとまりを大きく取り、居室を外周に配置。",positions:[[10,10,50,34],[62,10,20,24],[10,50,24,18],[38,50,24,18],[66,42,16,20],[10,72,28,14]]},
+ {name:"C案｜収納・個室",desc:"居室と収納を分け、プライバシーに配慮した配置。",positions:[[10,10,30,24],[44,10,38,24],[10,40,26,22],[40,40,26,22],[70,40,12,22],[10,68,30,18]]}
+];
+let plans=[],active=0,drag=null;
+function buildPlan(name,desc,names,positions){return {name,desc,rooms:names.map((n,i)=>({name:n,x:positions[i%positions.length][0],y:positions[i%positions.length][1],w:positions[i%positions.length][2],h:positions[i%positions.length][3],door:"開き戸",window:"南側"})),entrance:$('entrance').value};}
+function makePlans(){let names=roomNames();if(!names.length)names=["LDK","寝室","浴室","トイレ"];plans=templates.map(t=>buildPlan(t.name,t.desc,names,t.positions));active=0;render();}
+function svgFor(p,idx){let roomSvg=p.rooms.map((r,i)=>`<g class="room" data-room="${i}" transform="translate(${r.x*3.1},${r.y*2.5})"><rect width="${r.w*3.1}" height="${r.h*2.5}" rx="1"/><text x="${r.w*1.55}" y="${r.h*1.2}">${esc(r.name.slice(0,10))}</text><text class="sub" x="${r.w*1.55}" y="${r.h*1.2+12}">${(r.w/10*10).toFixed(1)} × ${(r.h/10*10).toFixed(1)} m</text></g>`).join('');
+return `<svg class="plan" data-plan="${idx}" viewBox="0 0 290 250" role="img" aria-label="${esc(p.name)}の概念間取り図"><rect x="4" y="4" width="282" height="242" rx="4" fill="#f6f4ef" stroke="#cbd5da"/><text x="12" y="17" font-size="8" fill="#687582">N ↑ · 概念図</text>${roomSvg}<text x="145" y="239" font-size="9" text-anchor="middle" fill="#687582">玄関：${esc(p.entrance)}側（位置の詳細は別途調整）</text></svg>`}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function render(){ $('plans').innerHTML=plans.map((p,i)=>`<article class="plan-card ${i===active?'active':''}" data-card="${i}"><div class="tag">PLAN ${String.fromCharCode(65+i)}</div><h3>${esc(p.name)}</h3><p>${esc(p.desc)}</p>${svgFor(p,i)}<button class="secondary" style="width:100%;margin-top:8px" data-select="${i}">この案を編集</button></article>`).join('');$('plans').querySelectorAll('[data-select]').forEach(b=>b.onclick=()=>{active=+b.dataset.select;render();syncEditor();});$('plans').querySelectorAll('svg.plan').forEach(svg=>{svg.addEventListener('pointerdown',startDrag);});syncEditor();}
+function syncEditor(){const p=plans[active];if(!p)return;const sel=$('roomSelect');let old=sel.value;sel.innerHTML=p.rooms.map((r,i)=>`<option value="${i}">${esc(r.name)}</option>`).join('');if(old && p.rooms[+old])sel.value=old;loadRoom();}
+function loadRoom(){const r=plans[active]?.rooms[+$('roomSelect').value];if(!r)return;$('roomWidth').value=(r.w/10).toFixed(1);$('roomHeight').value=(r.h/10).toFixed(1);$('doorType').value=r.door;$('windowSide').value=r.window;$('entranceSide').value=plans[active].entrance+'側';}
+function startDrag(e){const g=e.target.closest('.room');if(!g)return;const svg=e.currentTarget;const card=+svg.dataset.plan;if(card!==active){active=card;render();return;}const idx=+g.dataset.room;drag={svg,card,idx,startX:e.clientX,startY:e.clientY,room:{...plans[card].rooms[idx]},rect:svg.getBoundingClientRect()};svg.setPointerCapture?.(e.pointerId);svg.addEventListener('pointermove',moveDrag);svg.addEventListener('pointerup',endDrag,{once:true});}
+function moveDrag(e){if(!drag)return;let dx=(e.clientX-drag.startX)/drag.rect.width*290/3.1,dy=(e.clientY-drag.startY)/drag.rect.height*250/2.5;let r=plans[drag.card].rooms[drag.idx];r.x=Math.max(2,Math.min(88-drag.room.w,drag.room.x+dx));r.y=Math.max(8,Math.min(86-drag.room.h,drag.room.y+dy));const svg=drag.svg;const g=svg.querySelector(`.room[data-room="${drag.idx}"]`);if(g)g.setAttribute('transform',`translate(${r.x*3.1},${r.y*2.5})`);}
+function endDrag(){if(!drag)return;const c=drag.card;drag=null;render();$('status').textContent='部屋の配置を更新しました。必要に応じて寸法も調整してください。';}
+$('roomSelect').addEventListener('change',loadRoom);
+$('applyEdit').onclick=()=>{let p=plans[active],r=p.rooms[+$('roomSelect').value];if(!r)return;let w=Math.max(1,Math.min(10,+$('roomWidth').value||3)),h=Math.max(1,Math.min(10,+$('roomHeight').value||3));r.w=w*10;r.h=h*10;r.door=$('doorType').value;r.window=$('windowSide').value;p.entrance=$('entranceSide').value.replace('側','');render();$('status').textContent='編集を反映しました。概念図として確認してください。';};
+$('generate').onclick=async()=>{const btn=$('generate');btn.disabled=true;$('status').textContent='間取り案を準備しています…';try{const res=await fetch('/.netlify/functions/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({area:$('area').value,floors:$('floors').value,rooms:$('rooms').value,entrance:$('entrance').value,priority:$('priority').value,notes:$('notes').value})});if(res.ok){const data=await res.json();if(data.plans?.length){plans=data.plans.map((p,i)=>({name:p.name||templates[i%3].name,desc:p.description||templates[i%3].desc,rooms:(p.rooms||[]).map((r,j)=>({name:r.name||'部屋',x:Number(r.x)||10,y:Number(r.y)||10,w:Number(r.w)||20,h:Number(r.h)||18,door:r.door||'開き戸',window:r.window||'南側'})),entrance:p.entrance||$('entrance').value}));active=0;render();$('status').textContent='AIが間取り案を作成しました。配置・寸法を確認してください。';return;}}makePlans();$('status').textContent='サンプルの3案を表示しました。AI生成を使うには、Netlifyの環境変数 OPENAI_API_KEY の設定が必要です。';}catch(e){makePlans();$('status').textContent='サンプルの3案を表示しました。AI連携の設定前、または通信できない状態です。';}finally{btn.disabled=false;}};
+$('reset').onclick=()=>{makePlans();$('status').textContent='初期配置に戻しました。';};
+$('compare').onclick=()=>{const svg=$('plans').querySelector(`svg[data-plan="${active}"]`);if(svg){const w=window.open('','_blank');if(w){w.document.write('<meta name="viewport" content="width=device-width,initial-scale=1"><title>間取り案</title>'+svg.outerHTML);w.document.close();}}};
+makePlans();
+</script>
+</body>
+</html>
